@@ -1,40 +1,41 @@
 #include "Sol.h"
+#include "RTClib.h"
+#include "CoopTypes.cpp"
 #include <math.h>
 
 Sol::Sol()
 {
-}
-
-Sol::Sol(double lat, double lon, int gmtOffset, boolean dstTimeZone)
-{
     RADEG = (180.0 / M_PI);
     DEGRAD = (M_PI / 180.0);
     INV360 =  (1.0 / 360.0);
-    
-    _lat = lat;
-    _lon = lon;
-    _gmtOff = gmtOffset;
-    _dstOff = dstTimeZone ? 1 : 0;
+}
+
+Sol::Sol(Location loc, LocalTimeParams ltp) : Sol()
+{
+    _loc = loc;
+    _ltp = ltp;
+    sunriset();
 }
 
 void Sol::Update(DateTime dt)
 {
-    _dt = dt;
-    sunriset((int)_dt.year(), (int)_dt.month(), (int)_dt.day(), _lat, _lon, -35.0/60.0, 1);
+    _ltp.CurrentTime = dt;
+    sunriset();
 }
 
-DateTime Sol::Sunrise()
+DateTime Sol::dt_from_double(double d)
 {
-    int rh = (int)_rise;
-    int rm = (int)((_rise - (double)rh) * 60);
-    return DateTime(_dt.year(), _dt.month(), _dt.day(), rh + _gmtOff + _dstOff, rm);
-}
+    byte h = (byte)d;
+    byte m = (byte)((d - (double)h) * 60);
+    
+    h = h + _ltp.GMTOffsetHours + _ltp.CurrentDSTOffset();
 
-DateTime Sol::Sunset()
-{
-    int sh = (int)_set;
-    int sm = (int)((_set - (double)sh) * 60);
-    return DateTime(_dt.year(), _dt.month(), _dt.day(), sh + _gmtOff + _dstOff, sm);
+    return DateTime(
+        _ltp.CurrentTime.year(),
+        _ltp.CurrentTime.month(),
+        _ltp.CurrentTime.day(),
+        h,
+        m);
 }
 
 int Sol::days_since_2000_Jan_0(int y, int m,int d)
@@ -50,7 +51,7 @@ double Sol::asind(double x) { return (RADEG*asin(x)); }
 double Sol::acosd(double x) { return (RADEG*acos(x)); }
 double Sol::atan2d(double y, double x) { return (RADEG*atan2(y,x)); }
 
-void Sol::sunriset(int year, int month, int day, double lat, double lon, double altit, int upper_limb)
+void Sol::sunriset()
 /***************************************************************************/
 /* Note: year,month,date = calendar date, 1801-2099 only.             */
 /*       Eastern longitude positive, Western longitude negative       */
@@ -81,26 +82,32 @@ void Sol::sunriset(int year, int month, int day, double lat, double lon, double 
 /*                                                                    */
 /**********************************************************************/
 {
-    double  d,  /* Days since 2000 Jan 0.0 (negative before) */
-    sr,         /* Solar distance, astronomical units */
-    sRA,        /* Sun's Right Ascension */
-    sdec,       /* Sun's declination */
-    sradius,    /* Sun's apparent radius */
-    t,          /* Diurnal arc */
-    tsouth,     /* Time when Sun is at south */
-    sidtime;    /* Local sidereal time */
+    int year = (int)_ltp.CurrentTime.year(),
+        month = (int)_ltp.CurrentTime.month(),
+        day = (int)_ltp.CurrentTime.day(),
+        upper_limb = 1;
+
+    double altit = -35.0/60.0,
+        d,          /* Days since 2000 Jan 0.0 (negative before) */
+        sr,         /* Solar distance, astronomical units */
+        sRA,        /* Sun's Right Ascension */
+        sdec,       /* Sun's declination */
+        sradius,    /* Sun's apparent radius */
+        t,          /* Diurnal arc */
+        tsouth,     /* Time when Sun is at south */
+        sidtime;    /* Local sidereal time */
 
     /* Compute d of 12h local mean solar time */
-    d = days_since_2000_Jan_0(year,month,day) + 0.5 - lon/360.0;
+    d = days_since_2000_Jan_0(year,month,day) + 0.5 - _loc.Longitude/360.0;
     
     /* Compute the local sidereal time of this moment */
-    sidtime = revolution( GMST0(d) + 180.0 + lon );
+    sidtime = revolution(GMST0(d) + 180.0 + _loc.Longitude);
     
     /* Compute Sun's RA, Decl and distance at this moment */
-    sun_RA_dec( d, &sRA, &sdec, &sr );
+    sun_RA_dec(d, &sRA, &sdec, &sr);
     
     /* Compute time when Sun is at south - in hours UT */
-    tsouth = 12.0 - rev180(sidtime - sRA)/15.0;
+    tsouth = 12.0 - rev180(sidtime - sRA) / 15.0;
     
     /* Compute the Sun's apparent radius in degrees */
     sradius = 0.2666 / sr;
@@ -113,8 +120,8 @@ void Sol::sunriset(int year, int month, int day, double lat, double lon, double 
     /* the specified altitude altit: */
     {
         double cost;
-        cost = ( sind(altit) - sind(lat) * sind(sdec) ) /
-        ( cosd(lat) * cosd(sdec) );
+        cost = ( sind(altit) - sind(_loc.Latitude) * sind(sdec) ) /
+        ( cosd(_loc.Latitude) * cosd(sdec) );
         if ( cost >= 1.0 )
             t = 0.0;       /* Sun always below altit */
         else if ( cost <= -1.0 )
@@ -124,8 +131,8 @@ void Sol::sunriset(int year, int month, int day, double lat, double lon, double 
     }
     
     /* Store rise and set times - in hours UT */
-    _rise = tsouth - t;
-    _set  = tsouth + t;
+    Sunrise = dt_from_double(tsouth - t);
+    Sunset  = dt_from_double(tsouth + t);
 }
 
 double Sol::revolution(double x)

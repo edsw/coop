@@ -1,31 +1,27 @@
 //http://stjarnhimlen.se/comp/sunriset.c
+#ifndef Sol_Arduino_h
+#define Sol_Arduino_h
+
 #include <math.h>
 #include "RTClib.h"
-
-#ifndef Sol_Arduino
-#define Sol_Arduino
+#include "CoopTypes.cpp"
 
 class Sol
 {
 public:
     Sol();
-    Sol(double lat, double lon, int gmtOffset, boolean dstTimeZone);
+    Sol(Location loc, LocalTimeParams ltp);
     void Update(DateTime dt);
-    DateTime Sunrise();
-    DateTime Sunset();
+    DateTime Sunrise;
+    DateTime Sunset;
     
 private:
-    double _lat;
-    double _lon;
-    DateTime _dt;
-    int _gmtOff;
-    int _dstOff;
-    boolean _dst;
-    double _rise;
-    double _set;
+    Location _loc;
+    LocalTimeParams _ltp;
     double RADEG;
     double DEGRAD;
     double INV360;
+    DateTime dt_from_double(double d);
     int days_since_2000_Jan_0(int y, int m, int d);
     double sind(double x);
     double cosd(double x);
@@ -34,7 +30,7 @@ private:
     double asind(double x);
     double acosd(double x);
     double atan2d(double y, double x);
-    void sunriset(int year, int month, int day, double lat, double lon, double altit, int upper_limb);
+    void sunriset();
     double revolution(double x);
     double rev180(double x);
     double GMST0(double d);
