@@ -1,7 +1,10 @@
+#include <DS3231_Simple.h>
+#include <DateTime.h>
+#include <TimeSpan.h>
 #include "CoopTypes.cpp"
 #include "Sol.h"
 // Date and time functions using a DS3231 RTC connected via I2C and Wire lib
-#include "RTClib.h"
+//#include "RTClib.h"
 #include "EEPROM.h"
 
 const bool DEBUG = true;
@@ -20,45 +23,39 @@ LocalTimeParams timeParams = {
   DSTEndWeek: 1
 };
 
-RTC_DS3231 rtc;
 Sol sun;
+DS3231_Simple Clock;
 
 void setup() {  
   Serial.begin(9600);
+  delay(1000);
 
-  if (!rtc.begin()) {
-    Serial.println(F("Couldn't find RTC!"));
-    while (1);
-  }
-
-  if (rtc.lostPower() || DEBUG) {
+  Clock.begin();
+  if (Clock.lostPower() || DEBUG) {
     timeParams.CurrentTime = DateTime(F(__DATE__), F(__TIME__));
-    rtc.adjust(timeParams.CurrentTime);
+    Clock.write(timeParams.CurrentTime);
 
     if (timeParams.DSTOffsetHours != 0) {
       EEPROM.write(0, (int)(timeParams.CurrentDSTOffset() != 0));
     }
   }
-  else {
+  else
     adjustTime();
-  }
 
   sun = Sol(location, timeParams);
 }
 
 void adjustTime() {
-    DateTime now = rtc.now();
+    DateTime now = Clock.read();
 
     if (timeParams.DSTOffsetHours != 0) {
       bool timeSetDst = (bool)EEPROM.read(0);
       byte offset = timeParams.CurrentDSTOffset();
 
-      if (timeSetDst && offset == 0) {
+      if (timeSetDst && offset == 0)
         now = now - TimeSpan(0, offset, 0, 0);
-      }
-      else if (!timeSetDst && offset != 0) {
+      else if (!timeSetDst && offset != 0)
         now = now + TimeSpan(0, offset, 0, 0);
-      }
     }
     
     timeParams.CurrentTime = now;
@@ -66,25 +63,30 @@ void adjustTime() {
 
 void loop () {
   adjustTime();
-  sun.Update(timeParams.CurrentTime);
   printTimeInfo();
+
+  //Clock.printTo(Serial);
+  //Serial.println();
+  
+  sun.Update(timeParams.CurrentTime);
+  //printTimeInfo();
   delay(5000);
 }
 
 void printTimeInfo() {
   int dstOffset = timeParams.CurrentDSTOffset();
   Serial.print("Current Time: ");
-  Serial.print(timeParams.CurrentTime.year());
+  Serial.print(timeParams.CurrentTime.Year);
   Serial.print('-');
-  Serial.print(timeParams.CurrentTime.month());
+  Serial.print(timeParams.CurrentTime.Month);
   Serial.print('-');
-  Serial.print(timeParams.CurrentTime.day());
+  Serial.print(timeParams.CurrentTime.Day);
   Serial.print(' ');
-  Serial.print(timeParams.CurrentTime.hour());
+  Serial.print(timeParams.CurrentTime.Hour);
   Serial.print(':');
-  Serial.print(timeParams.CurrentTime.minute());
+  Serial.print(timeParams.CurrentTime.Minute);
   Serial.print(':');
-  Serial.print(timeParams.CurrentTime.second());
+  Serial.print(timeParams.CurrentTime.Second);
   Serial.print(" (GMT");
   Serial.print(timeParams.GMTOffsetHours);
   if (dstOffset != 0) {
@@ -96,12 +98,12 @@ void printTimeInfo() {
   Serial.println();
 
   Serial.print("Sunrise: ");
-  Serial.print(sun.Sunrise.hour(), DEC);
+  Serial.print(sun.Sunrise.Hour, DEC);
   Serial.print(':');
-  Serial.print(sun.Sunrise.minute(), DEC);
+  Serial.print(sun.Sunrise.Minute, DEC);
   Serial.print(" Sunset: ");
-  Serial.print(sun.Sunset.hour(), DEC);
+  Serial.print(sun.Sunset.Hour, DEC);
   Serial.print(':');
-  Serial.print(sun.Sunset.minute(), DEC);
+  Serial.print(sun.Sunset.Minute, DEC);
   Serial.println();
 }

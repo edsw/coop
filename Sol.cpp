@@ -1,45 +1,37 @@
 #include "Sol.h"
-#include "RTClib.h"
+#include <DS3231_Simple.h>
+#include <DateTime.h>
+#include <TimeSpan.h>
 #include "CoopTypes.cpp"
 #include <math.h>
 
-Sol::Sol()
-{
-    RADEG = (180.0 / M_PI);
-    DEGRAD = (M_PI / 180.0);
-    INV360 =  (1.0 / 360.0);
-}
+double RADEG = (180.0 / M_PI);
+double DEGRAD = (M_PI / 180.0);
+double INV360 =  (1.0 / 360.0);
+    
+Sol::Sol() {}
 
-Sol::Sol(Location loc, LocalTimeParams ltp) : Sol()
-{
+Sol::Sol(Location loc, LocalTimeParams ltp) {
     _loc = loc;
     _ltp = ltp;
     sunriset();
 }
 
-void Sol::Update(DateTime dt)
-{
+void Sol::Update(DateTime dt) {
     _ltp.CurrentTime = dt;
     sunriset();
 }
 
-DateTime Sol::dt_from_double(double d)
-{
+DateTime Sol::dt_from_double(double d) {
     byte h = (byte)d;
     byte m = (byte)((d - (double)h) * 60);
     
     h = h + _ltp.GMTOffsetHours + _ltp.CurrentDSTOffset();
-
-    return DateTime(
-        _ltp.CurrentTime.year(),
-        _ltp.CurrentTime.month(),
-        _ltp.CurrentTime.day(),
-        h,
-        m);
+ 
+    return DateTime(_ltp.CurrentTime.Year, _ltp.CurrentTime.Month, _ltp.CurrentTime.Day, h, m);
 }
 
-int Sol::days_since_2000_Jan_0(int y, int m,int d)
-{
+int Sol::days_since_2000_Jan_0(int y, int m,int d) {
     return (367L*(y)-((7*((y)+(((m)+9)/12)))/4)+((275*(m))/9)+(d)-730530L);
 }
 
@@ -51,7 +43,7 @@ double Sol::asind(double x) { return (RADEG*asin(x)); }
 double Sol::acosd(double x) { return (RADEG*acos(x)); }
 double Sol::atan2d(double y, double x) { return (RADEG*atan2(y,x)); }
 
-void Sol::sunriset()
+void Sol::sunriset() {
 /***************************************************************************/
 /* Note: year,month,date = calendar date, 1801-2099 only.             */
 /*       Eastern longitude positive, Western longitude negative       */
@@ -81,10 +73,9 @@ void Sol::sunriset()
 /*                    both set to the time when the sun is at south.  */
 /*                                                                    */
 /**********************************************************************/
-{
-    int year = (int)_ltp.CurrentTime.year(),
-        month = (int)_ltp.CurrentTime.month(),
-        day = (int)_ltp.CurrentTime.day(),
+    int year = (int)_ltp.CurrentTime.Year,
+        month = (int)_ltp.CurrentTime.Month,
+        day = (int)_ltp.CurrentTime.Day,
         upper_limb = 1;
 
     double altit = -35.0/60.0,
@@ -135,19 +126,17 @@ void Sol::sunriset()
     Sunset  = dt_from_double(tsouth + t);
 }
 
-double Sol::revolution(double x)
+double Sol::revolution(double x) {
 /*****************************************/
 /* Reduce angle to within 0..360 degrees */
 /*****************************************/
-{
     return (x - 360.0 * floor(x * INV360));
 }
 
-double Sol::rev180(double x)
+double Sol::rev180(double x) {
 /*********************************************/
 /* Reduce angle to within +180..+180 degrees */
 /*********************************************/
-{
     return (x - 360.0 * floor(x * INV360 + 0.5));
 }
 
@@ -177,8 +166,7 @@ double Sol::rev180(double x)
 /*                                                                 */
 /*******************************************************************/
 
-double Sol::GMST0(double d)
-{
+double Sol::GMST0(double d) {
     double sidtim0;
     /* Sidtime at 0h UT = L (Sun's mean longitude) + 180.0 degr  */
     /* L = M + w, as defined in sunpos().  Since I'm too lazy to */
@@ -189,13 +177,12 @@ double Sol::GMST0(double d)
     return sidtim0;
 }
 
-void Sol::sun_RA_dec(double d, double *RA, double *dec, double *r)
+void Sol::sun_RA_dec(double d, double *RA, double *dec, double *r) {
 /******************************************************/
 /* Computes the Sun's equatorial coordinates RA, Decl */
 /* and also its distance, at an instant given in d,   */
 /* the number of days since 2000 Jan 0.0.             */
 /******************************************************/
-{
     double lon, obl_ecl, x, y, z;
     
     /* Compute Sun's ecliptical coordinates */
@@ -220,14 +207,13 @@ void Sol::sun_RA_dec(double d, double *RA, double *dec, double *r)
 
 /* This function computes the Sun's position at any instant */
 
-void Sol::sunpos(double d, double *lon, double *r)
+void Sol::sunpos(double d, double *lon, double *r) {
 /******************************************************/
 /* Computes the Sun's ecliptic longitude and distance */
 /* at an instant given in d, number of days since     */
 /* 2000 Jan 0.0.  The Sun's ecliptic latitude is not  */
 /* computed, since it's always very near 0.           */
 /******************************************************/
-{
     double M,         /* Mean anomaly of the Sun */
     w,         /* Mean longitude of perihelion */
     /* Note: Sun's mean longitude = M + w */
@@ -242,14 +228,12 @@ void Sol::sunpos(double d, double *lon, double *r)
     e = 0.016709 - 1.151E-9 * d;
     
     /* Compute true longitude and radius vector */
-    E = M + e * RADEG * sind(M) * ( 1.0 + e * cosd(M) );
+    E = M + e * RADEG * sind(M) * (1.0 + e * cosd(M));
     x = cosd(E) - e;
     y = sqrt( 1.0 - e*e ) * sind(E);
     *r = sqrt( x*x + y*y );              /* Solar distance */
     v = atan2d( y, x );                  /* True anomaly */
     *lon = v + w;                        /* True solar longitude */
     if ( *lon >= 360.0 )
-    {
         *lon -= 360.0;                   /* Make it 0..360 degrees */
-    }
 }
