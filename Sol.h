@@ -14,6 +14,7 @@ public:
     void Update(DateTime dt);
     DateTime Sunrise;
     DateTime Sunset;
+    void PrintTo(Stream &Printer);
     
 private:
     Location _loc;

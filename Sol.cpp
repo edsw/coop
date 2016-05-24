@@ -31,6 +31,17 @@ DateTime Sol::dt_from_double(double d) {
     return DateTime(_ltp.CurrentTime.Year, _ltp.CurrentTime.Month, _ltp.CurrentTime.Day, h, m);
 }
 
+void Sol::PrintTo(Stream &Printer) {
+  Printer.print(F("Sunrise: "));
+  Printer.print(Sunrise.Hour, DEC);
+  Printer.print(':');
+  Printer.print(Sunrise.Minute, DEC);
+  Printer.print(F(" Sunset: "));
+  Printer.print(Sunset.Hour, DEC);
+  Printer.print(':');
+  Printer.print(Sunset.Minute, DEC);
+}
+
 int Sol::days_since_2000_Jan_0(int y, int m,int d) {
     return (367L*(y)-((7*((y)+(((m)+9)/12)))/4)+((275*(m))/9)+(d)-730530L);
 }
@@ -73,7 +84,7 @@ void Sol::sunriset() {
 /*                    both set to the time when the sun is at south.  */
 /*                                                                    */
 /**********************************************************************/
-    int year = (int)_ltp.CurrentTime.Year,
+    int year = ((int)_ltp.CurrentTime.Year) + 2000,
         month = (int)_ltp.CurrentTime.Month,
         day = (int)_ltp.CurrentTime.Day,
         upper_limb = 1;

@@ -1,11 +1,6 @@
 #include <DS3231_Simple.h>
-#include <DateTime.h>
-#include <TimeSpan.h>
-#include "CoopTypes.cpp"
+#include <EEPROM.h>
 #include "Sol.h"
-// Date and time functions using a DS3231 RTC connected via I2C and Wire lib
-//#include "RTClib.h"
-#include "EEPROM.h"
 
 const bool DEBUG = true;
 
@@ -23,7 +18,7 @@ LocalTimeParams timeParams = {
   DSTEndWeek: 1
 };
 
-Sol sun;
+Sol Sun;
 DS3231_Simple Clock;
 
 void setup() {  
@@ -42,7 +37,7 @@ void setup() {
   else
     adjustTime();
 
-  sun = Sol(location, timeParams);
+  Sun = Sol(location, timeParams);
 }
 
 void adjustTime() {
@@ -63,47 +58,10 @@ void adjustTime() {
 
 void loop () {
   adjustTime();
-  printTimeInfo();
-
-  //Clock.printTo(Serial);
-  //Serial.println();
+  Sun.Update(timeParams.CurrentTime);
   
-  sun.Update(timeParams.CurrentTime);
-  //printTimeInfo();
-  delay(5000);
-}
+  Clock.printTo(Serial); Serial.print(' ');
+  Sun.PrintTo(Serial); Serial.println();
 
-void printTimeInfo() {
-  int dstOffset = timeParams.CurrentDSTOffset();
-  Serial.print("Current Time: ");
-  Serial.print(timeParams.CurrentTime.Year);
-  Serial.print('-');
-  Serial.print(timeParams.CurrentTime.Month);
-  Serial.print('-');
-  Serial.print(timeParams.CurrentTime.Day);
-  Serial.print(' ');
-  Serial.print(timeParams.CurrentTime.Hour);
-  Serial.print(':');
-  Serial.print(timeParams.CurrentTime.Minute);
-  Serial.print(':');
-  Serial.print(timeParams.CurrentTime.Second);
-  Serial.print(" (GMT");
-  Serial.print(timeParams.GMTOffsetHours);
-  if (dstOffset != 0) {
-    Serial.print(", DST");
-    Serial.print(dstOffset > 0 ? '+' : '-');
-    Serial.print(dstOffset);
-  }
-  Serial.print(')');
-  Serial.println();
-
-  Serial.print("Sunrise: ");
-  Serial.print(sun.Sunrise.Hour, DEC);
-  Serial.print(':');
-  Serial.print(sun.Sunrise.Minute, DEC);
-  Serial.print(" Sunset: ");
-  Serial.print(sun.Sunset.Hour, DEC);
-  Serial.print(':');
-  Serial.print(sun.Sunset.Minute, DEC);
-  Serial.println();
+  delay(10000);
 }
