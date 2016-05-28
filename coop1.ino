@@ -18,8 +18,11 @@ LocalTimeParams timeParams = {
   DSTEndWeek: 1
 };
 
+enum COOP_ACTIONS { AM_LIGHTS_ON, DOOR_OPEN, AM_LIGHTS_OFF, PM_LIGHTS_ON, DOOR_CLOSE, PM_LIGHTS_OFF };
+byte currentStep;
 Sol Sun;
 DS3231_Simple Clock;
+volatile boolean alarmIsrWasCalled = false;
 
 void setup() {  
   Serial.begin(9600);
@@ -38,6 +41,21 @@ void setup() {
     adjustTime();
 
   Sun = Sol(location, timeParams);
+
+  setAlarm();
+}
+
+void setAlarm() {
+  Clock.disableSquareWave();
+
+  pinMode(7, INPUT_PULLUP);
+  attachInterrupt(4, alarmIsr, FALLING);
+
+  DateTime alarm1 = Clock.read();
+  alarm1.Second = 20;
+  Clock.setAlarm(alarm1, DS3231_Simple::ALARM_MATCH_SECOND);
+
+  Clock.setAlarm(DS3231_Simple::ALARM_EVERY_MINUTE);
 }
 
 void adjustTime() {
@@ -57,11 +75,63 @@ void adjustTime() {
 }
 
 void loop () {
-  adjustTime();
+  /*adjustTime();
   Sun.Update(timeParams.CurrentTime);
   
   Clock.printTo(Serial); Serial.print(' ');
   Sun.PrintTo(Serial); Serial.println();
 
-  delay(10000);
+  delay(10000);*/
+
+  //uint8_t alarmFired = Clock.checkAlarms();
+
+  if (alarmIsrWasCalled) {
+    uint8_t AlarmsFired = Clock.checkAlarms();
+
+    if(AlarmsFired & 1)
+    {
+      Clock.printTo(Serial); Serial.println(": First alarm has fired!");
+    }
+    
+    if(AlarmsFired & 2)
+    {
+      Clock.printTo(Serial); Serial.println(": Second alarm has fired!");
+    }
+
+    alarmIsrWasCalled = false;
+  }
+}
+
+void takeCurrentAction() {
+  byte step = EEPROM.read(1);
+
+  switch (step) {
+    case AM_LIGHTS_ON:
+      break;
+
+     case DOOR_OPEN:
+      break;
+
+     case AM_LIGHTS_OFF:
+      break;
+
+     case PM_LIGHTS_ON:
+      break;
+
+     case DOOR_CLOSE:
+      break;
+
+     case PM_LIGHTS_OFF:
+      break;
+  }
+
+  EEPROM.write(1, step == PM_LIGHTS_OFF ? 0 : step + 1);
+}
+
+void setNextAlarm() {
+  
+}
+
+void alarmIsr() {
+    alarmIsrWasCalled = true;
 }
