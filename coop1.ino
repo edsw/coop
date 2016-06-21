@@ -18,7 +18,8 @@ LocalTimeParams timeParams = {
   DSTEndWeek: 1
 };
 
-enum COOP_ACTIONS { AM_LIGHTS_ON, DOOR_OPEN, AM_LIGHTS_OFF, PM_LIGHTS_ON, DOOR_CLOSE, PM_LIGHTS_OFF };
+enum COOP_ACTIONS { AM_LIGHTS_ON, DOOR_OPEN, AM_LIGHTS_OFF,
+                    PM_LIGHTS_ON, DOOR_CLOSE, PM_LIGHTS_OFF };
 byte currentStep;
 Sol Sun;
 DS3231_Simple Clock;
@@ -36,6 +37,8 @@ void setup() {
     if (timeParams.DSTOffsetHours != 0) {
       EEPROM.write(0, (int)(timeParams.CurrentDSTOffset() != 0));
     }
+
+    EEPROM.write(1, 0);
   }
   else
     adjustTime();
@@ -72,64 +75,108 @@ void adjustTime() {
     }
     
     timeParams.CurrentTime = now;
+    Sun.Update(timeParams.CurrentTime);
 }
 
-void loop () {
-  /*adjustTime();
-  Sun.Update(timeParams.CurrentTime);
-  
-  Clock.printTo(Serial); Serial.print(' ');
-  Sun.PrintTo(Serial); Serial.println();
-
-  delay(10000);*/
-
-  //uint8_t alarmFired = Clock.checkAlarms();
-
+void loop() {
   if (alarmIsrWasCalled) {
     uint8_t AlarmsFired = Clock.checkAlarms();
 
     if(AlarmsFired & 1)
     {
-      Clock.printTo(Serial); Serial.println(": First alarm has fired!");
+      Clock.printTo(Serial); Serial.println(F(": First alarm has fired!"));
     }
     
     if(AlarmsFired & 2)
     {
-      Clock.printTo(Serial); Serial.println(": Second alarm has fired!");
+      Clock.printTo(Serial); Serial.println(F(": Second alarm has fired!"));
     }
 
     alarmIsrWasCalled = false;
+    takeCurrentAction();
   }
 }
 
 void takeCurrentAction() {
-  byte step = EEPROM.read(1);
+  adjustTime();
+  currentStep = EEPROM.read(1);
 
-  switch (step) {
+  switch (currentStep) {
     case AM_LIGHTS_ON:
+      printAction(F("Turning on morning lights"));
       break;
 
      case DOOR_OPEN:
+      printAction(F("Opening door"));
       break;
 
      case AM_LIGHTS_OFF:
+      printAction(F("Turning off morning lights"));
       break;
 
      case PM_LIGHTS_ON:
+      printAction(F("Turning on evening lights"));
       break;
 
      case DOOR_CLOSE:
+      printAction(F("Closing door"));
       break;
 
      case PM_LIGHTS_OFF:
+      printAction(F("Turning off evening lights"));
       break;
   }
 
-  EEPROM.write(1, step == PM_LIGHTS_OFF ? 0 : step + 1);
+  setNextAlarm();
+  EEPROM.write(1, currentStep == PM_LIGHTS_OFF ? 0 : currentStep + 1);
 }
 
 void setNextAlarm() {
+  adjustTime();
+  DateTime toSet;
+
+  switch (currentStep) {
+    case AM_LIGHTS_ON:
+      toSet = Sun.Sunrise;
+      break;
+
+     case DOOR_OPEN:
+      toSet = timeParams.CurrentTime + TimeSpan(0, 0, 30, 0);
+      break;
+
+     case AM_LIGHTS_OFF:
+      toSet = Sun.Sunset - TimeSpan(0, 0, 30, 0);
+      break;
+
+     case PM_LIGHTS_ON:
+      toSet = Sun.Sunset;
+      break;
+
+     case DOOR_CLOSE:
+      toSet = DateTime(timeParams.CurrentTime.Year, timeParams.CurrentTime.Month,
+                timeParams.CurrentTime.Day, 21, 0, 0);
+      break;
+
+     case PM_LIGHTS_OFF:
+      toSet = timeParams.CurrentTime + TimeSpan(0, 8, 0, 0);
+      break;
+  }
+
+  //TODO: Convert to function like DateTime.printTo(Serial)
+  byte offset = timeParams.GMTOffsetHours + timeParams.CurrentDSTOffset();
+  String offsetText = (offset < 0 ? '-' : '+') + offset + ":00";
   
+  printAction("Setting alarm to " + toSet.Year + '-' + toSet.Month + '-' + toSet.Day +
+     'T' + toSet.Hour + ':' + toSet.Minute + ':' + toSet.Second + offsetText);
+    
+  Clock.setAlarm(toSet, DS3231_Simple::ALARM_MATCH_SECOND_MINUTE_HOUR);
+}
+
+void printAction(String action) {
+  Clock.printTo(Serial);
+  Serial.print(' ');
+  Serial.print("Action: ");
+  Serial.println(action);
 }
 
 void alarmIsr() {
