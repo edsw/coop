@@ -25,7 +25,7 @@ Sol Sun;
 DS3231_Simple Clock;
 volatile boolean alarmIsrWasCalled = false;
 
-void setup() {  
+void setup() {
   Serial.begin(9600);
   delay(1000);
 
@@ -82,14 +82,14 @@ void loop() {
   if (alarmIsrWasCalled) {
     uint8_t AlarmsFired = Clock.checkAlarms();
 
-    if(AlarmsFired & 1)
+    if (AlarmsFired & 1)
     {
-      Clock.printTo(Serial); Serial.println(F(": First alarm has fired!"));
+      printAction(F("First alarm fired"));
     }
     
-    if(AlarmsFired & 2)
+    if (AlarmsFired & 2)
     {
-      Clock.printTo(Serial); Serial.println(F(": Second alarm has fired!"));
+      printAction(F("Second alarm fired"));
     }
 
     alarmIsrWasCalled = false;
@@ -140,42 +140,62 @@ void setNextAlarm() {
       toSet = Sun.Sunrise;
       break;
 
-     case DOOR_OPEN:
+    case DOOR_OPEN:
       toSet = timeParams.CurrentTime + TimeSpan(0, 0, 30, 0);
       break;
 
-     case AM_LIGHTS_OFF:
+    case AM_LIGHTS_OFF:
       toSet = Sun.Sunset - TimeSpan(0, 0, 30, 0);
       break;
 
-     case PM_LIGHTS_ON:
+    case PM_LIGHTS_ON:
       toSet = Sun.Sunset;
       break;
 
-     case DOOR_CLOSE:
+    case DOOR_CLOSE:
       toSet = DateTime(timeParams.CurrentTime.Year, timeParams.CurrentTime.Month,
                 timeParams.CurrentTime.Day, 21, 0, 0);
       break;
 
-     case PM_LIGHTS_OFF:
+    case PM_LIGHTS_OFF:
       toSet = timeParams.CurrentTime + TimeSpan(0, 8, 0, 0);
       break;
   }
 
   //TODO: Convert to function like DateTime.printTo(Serial)
-  byte offset = timeParams.GMTOffsetHours + timeParams.CurrentDSTOffset();
-  String offsetText = (offset < 0 ? '-' : '+') + offset + ":00";
-  
-  printAction("Setting alarm to " + toSet.Year + '-' + toSet.Month + '-' + toSet.Day +
-     'T' + toSet.Hour + ':' + toSet.Minute + ':' + toSet.Second + offsetText);
-    
+  short offset = timeParams.GMTOffsetHours + timeParams.CurrentDSTOffset();
+  String out = F("Setting alarm to 20");
+  out.concat(toSet.Year);
+  out.concat('-');
+  out.concat(zeroPad(toSet.Month));
+  out.concat('-');
+  out.concat(zeroPad(toSet.Day));
+  out.concat('T');
+  out.concat(zeroPad(toSet.Hour));
+  out.concat(':');
+  out.concat(zeroPad(toSet.Minute));
+  out.concat(':');
+  out.concat(zeroPad(toSet.Second));
+  out.concat((offset < 0 ? '-' : '+'));
+  out.concat(abs(offset));
+  out.concat(F(":00"));
+  printAction(out);
   Clock.setAlarm(toSet, DS3231_Simple::ALARM_MATCH_SECOND_MINUTE_HOUR);
+}
+
+String zeroPad(byte s) {
+  if (s < 10) {
+    String out = "0";
+    out.concat(s);
+    return out;
+  }
+
+  return String(s);
 }
 
 void printAction(String action) {
   Clock.printTo(Serial);
-  Serial.print(' ');
-  Serial.print("Action: ");
+  Serial.print(F(": "));
   Serial.println(action);
 }
 
