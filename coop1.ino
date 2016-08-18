@@ -2,7 +2,7 @@
 #include <EEPROM.h>
 #include "Sol.h"
 
-const bool DEBUG = true;
+const bool DEBUG = false;
 
 const Location location = {
   Latitude: 41.931745,
@@ -21,13 +21,31 @@ LocalTimeParams timeParams = {
 enum COOP_ACTIONS { AM_LIGHTS_ON, DOOR_OPEN, AM_LIGHTS_OFF,
                     PM_LIGHTS_ON, DOOR_CLOSE, PM_LIGHTS_OFF };
 byte currentStep;
+bool switchPressed = false;
 Sol Sun;
 DS3231_Simple Clock;
 volatile boolean alarmIsrWasCalled = false;
 
+const int LIGHTS_PIN = 10;
+const int MOTOR_PWM_PIN = 5;
+const int MOTOR_DIR_PIN = 6;
+const int UP_SWITCH_PIN = 14;
+const int DOWN_SWITCH_PIN = 16;
+const int RTC_SQW_INTERRUPT = 4;
+const int MOTOR_UP_SECONDS = 60;
+const int MOTOR_DOWN_SECONDS = 60;
+
 void setup() {
   Serial.begin(9600);
-  delay(1000);
+
+  pinMode(LIGHTS_PIN, OUTPUT);
+  pinMode(MOTOR_PWM_PIN, OUTPUT);
+  pinMode(MOTOR_DIR_PIN, OUTPUT);
+  pinMode(UP_SWITCH_PIN, INPUT_PULLUP);
+  pinMode(DOWN_SWITCH_PIN, INPUT_PULLUP);
+
+  digitalWrite(MOTOR_PWM_PIN, LOW);
+  digitalWrite(MOTOR_DIR_PIN, LOW);
 
   Clock.begin();
   if (Clock.lostPower() || DEBUG) {
@@ -45,20 +63,23 @@ void setup() {
 
   Sun = Sol(location, timeParams);
 
-  setAlarm();
+  setupAlarm();
+  currentStep = EEPROM.read(1);
+  setNextAlarm();
 }
 
-void setAlarm() {
+void setupAlarm() {
   Clock.disableSquareWave();
 
-  pinMode(7, INPUT_PULLUP);
-  attachInterrupt(4, alarmIsr, FALLING);
+  pinMode(RTC_SQW_INTERRUPT, INPUT_PULLUP);
+  attachInterrupt(RTC_SQW_INTERRUPT, alarmIsr, FALLING);
 
-  DateTime alarm1 = Clock.read();
-  alarm1.Second = 20;
-  Clock.setAlarm(alarm1, DS3231_Simple::ALARM_MATCH_SECOND);
-
-  Clock.setAlarm(DS3231_Simple::ALARM_EVERY_MINUTE);
+  if (DEBUG) {
+    DateTime alarm1 = Clock.read();
+    alarm1.Second = 20;
+    Clock.setAlarm(alarm1, DS3231_Simple::ALARM_MATCH_SECOND);
+    Clock.setAlarm(DS3231_Simple::ALARM_EVERY_MINUTE);
+  }
 }
 
 void adjustTime() {
@@ -79,6 +100,23 @@ void adjustTime() {
 }
 
 void loop() {
+  if (digitalRead(UP_SWITCH_PIN) == LOW) {
+      digitalWrite(MOTOR_DIR_PIN, LOW);
+      digitalWrite(MOTOR_PWM_PIN, HIGH);
+      switchPressed = true;
+  }
+  
+  if (digitalRead(DOWN_SWITCH_PIN) == LOW) {
+      digitalWrite(MOTOR_DIR_PIN, HIGH);
+      digitalWrite(MOTOR_PWM_PIN, HIGH);
+      switchPressed = true;
+  }
+  
+  if (digitalRead(UP_SWITCH_PIN) == HIGH && digitalRead(DOWN_SWITCH_PIN) == HIGH && switchPressed) {
+       digitalWrite(MOTOR_PWM_PIN, LOW);
+       switchPressed = false;
+  }
+  
   if (alarmIsrWasCalled) {
     uint8_t AlarmsFired = Clock.checkAlarms();
 
@@ -104,26 +142,38 @@ void takeCurrentAction() {
   switch (currentStep) {
     case AM_LIGHTS_ON:
       printAction(F("Turning on morning lights"));
+      digitalWrite(LIGHTS_PIN, HIGH);
       break;
 
      case DOOR_OPEN:
       printAction(F("Opening door"));
+      digitalWrite(MOTOR_DIR_PIN, LOW);
+      digitalWrite(MOTOR_PWM_PIN, HIGH);
+      delay(MOTOR_UP_SECONDS * 1000);
+      digitalWrite(MOTOR_PWM_PIN, LOW);
       break;
 
      case AM_LIGHTS_OFF:
       printAction(F("Turning off morning lights"));
+      digitalWrite(LIGHTS_PIN, LOW);
       break;
 
      case PM_LIGHTS_ON:
       printAction(F("Turning on evening lights"));
+      digitalWrite(LIGHTS_PIN, HIGH);
       break;
 
      case DOOR_CLOSE:
       printAction(F("Closing door"));
+      digitalWrite(MOTOR_DIR_PIN, HIGH);
+      digitalWrite(MOTOR_PWM_PIN, HIGH);
+      delay(MOTOR_DOWN_SECONDS * 1000);
+      digitalWrite(MOTOR_PWM_PIN, LOW);
       break;
 
      case PM_LIGHTS_OFF:
       printAction(F("Turning off evening lights"));
+      digitalWrite(LIGHTS_PIN, LOW);
       break;
   }
 
