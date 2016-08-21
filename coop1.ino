@@ -59,6 +59,9 @@ void setup() {
       EEPROM.write(EEPROM_DST, (int)(timeParams.CurrentDSTOffsetHours() != 0));
     }
   }
+  else {
+    adjustTime();
+  }
 
   Sun = Sol(location, timeParams);
   setupAlarm();
