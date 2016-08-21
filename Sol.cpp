@@ -14,7 +14,6 @@ Sol::Sol() {}
 Sol::Sol(Location loc, LocalTimeParams ltp) {
     _loc = loc;
     _ltp = ltp;
-    sunriset();
 }
 
 void Sol::Update(DateTime dt) {

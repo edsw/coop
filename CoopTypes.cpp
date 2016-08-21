@@ -2,8 +2,10 @@
 #define Coop_Types_Cpp
 
 #include <Arduino.h>
-//#include "RTClib.h"
 #include <DS3231_Simple.h>
+
+enum COOP_ACTIONS { AM_LIGHT_ON, DOOR_OPEN, AM_LIGHT_OFF,
+                    PM_LIGHT_ON, DOOR_CLOSE, PM_LIGHT_OFF, RESET };
 
 struct Location {
     double Latitude;
@@ -19,7 +21,7 @@ struct LocalTimeParams {
     byte DSTEndWeek;
     DateTime CurrentTime;
 
-    byte CurrentDSTOffset() {//https://github.com/probonopd/TimeLord/blob/master/TimeLord.cpp
+    byte CurrentDSTOffsetHours() {//https://github.com/probonopd/TimeLord/blob/master/TimeLord.cpp
         if (DSTOffsetHours == 0 || CurrentTime.Month < DSTStartMonth || CurrentTime.Month > DSTEndMonth)
             return 0;
             
@@ -48,6 +50,10 @@ struct LocalTimeParams {
         if (dow > 0) return 0;
         if (CurrentTime.Hour > 1) return 0;
         return DSTOffsetHours;
+    }
+
+    short CurrentDSTOffset() {
+      return GMTOffsetHours + CurrentDSTOffsetHours();
     }
 };
 #endif
