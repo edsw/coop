@@ -14,10 +14,11 @@ Sol::Sol() {}
 Sol::Sol(Location loc, LocalTimeParams ltp) {
     _loc = loc;
     _ltp = ltp;
+    sunriset();
 }
 
-void Sol::Update(DateTime dt) {
-    _ltp.CurrentTime = dt;
+void Sol::Update(LocalTimeParams l) {
+    _ltp = l;
     sunriset();
 }
 
@@ -39,6 +40,7 @@ void Sol::PrintTo(Stream &Printer) {
   Printer.print(Sunset.Hour, DEC);
   Printer.print(':');
   Printer.print(Sunset.Minute, DEC);
+  Printer.println();
 }
 
 int Sol::days_since_2000_Jan_0(int y, int m,int d) {

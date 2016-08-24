@@ -11,7 +11,7 @@ class Sol
 public:
     Sol();
     Sol(Location loc, LocalTimeParams ltp);
-    void Update(DateTime dt);
+    void Update(LocalTimeParams l);
     DateTime Sunrise;
     DateTime Sunset;
     void PrintTo(Stream &Printer);

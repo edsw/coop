@@ -2,7 +2,7 @@
 #include <EEPROM.h>
 #include "Sol.h"
 
-const bool DEBUG = false;
+const bool DEBUG = true;
 
 const Location location = {
   Latitude: 41.931745,
@@ -21,16 +21,16 @@ LocalTimeParams timeParams = {
 const int LIGHT_PIN = 10,
           MOTOR_PWM_PIN = 5,
           MOTOR_DIR_PIN = 6,
-          UP_SWITCH_PIN = 14,
-          DOWN_SWITCH_PIN = 16,
+          UP_SWITCH_PIN = 16,
+          DOWN_SWITCH_PIN = 14,
           RTC_SQW_INTERRUPT = 4;
 
-const int MOTOR_UP_SECONDS = 60,
-          MOTOR_DOWN_SECONDS = 60;
+const int MOTOR_UP_SECONDS = 2,//60
+          MOTOR_DOWN_SECONDS = 2;//60;
 
 const int EEPROM_DST = 0,
           EEPROM_ACTION = 1,
-          EEPROM_DOOR_STATE = 3;
+          EEPROM_DOOR_STATE = 2;
 
 Sol Sun;
 DS3231_Simple Clock;
@@ -40,6 +40,7 @@ volatile boolean alarmIsrWasCalled = false;
 
 void setup() {
   Serial.begin(9600);
+  delay(3000);
   Clock.begin();
 
   pinMode(LIGHT_PIN, OUTPUT);
@@ -52,47 +53,77 @@ void setup() {
   digitalWrite(MOTOR_DIR_PIN, LOW);
 
   if (DEBUG) {
+    printAction(F("Entering DEBUG mode"));
     timeParams.CurrentTime = DateTime(F(__DATE__), F(__TIME__));
     Clock.write(timeParams.CurrentTime);
 
     if (timeParams.DSTOffsetHours != 0) {
-      EEPROM.write(EEPROM_DST, (int)(timeParams.CurrentDSTOffsetHours() != 0));
+      byte val = (int)(timeParams.CurrentDSTOffsetHours() != 0);
+      printAction("Currently in DST? " + (String)val);
+      EEPROM.write(EEPROM_DST, val);
     }
   }
+
+  adjustTime();
+  setupAlarm();
+  
+  if (!DEBUG) {
+    COOP_ACTIONS next = getNextAlarm();
+    printAction("Setting next alarm " + (String)next);
+    EEPROM.write(EEPROM_ACTION, next);
+    setNextAlarm();
+  }
   else {
-    adjustTime();
+    EEPROM.write(EEPROM_ACTION, 0);
   }
 
-  Sun = Sol(location, timeParams);
-  setupAlarm();
-  EEPROM.write(EEPROM_ACTION, getNextAlarm());
-  setNextAlarm();
+  lightToggle(true);
 }
 
 void adjustTime() {
-    DateTime now = Clock.read();
+  printAction(F("Adjusting time"));
+  DateTime now = Clock.read();
 
-    if (timeParams.DSTOffsetHours != 0) {
-      bool timeSetDst = (bool)EEPROM.read(EEPROM_DST);
-      byte offset = timeParams.CurrentDSTOffsetHours();
+  if (timeParams.DSTOffsetHours != 0) {
+    bool timeSetDst = (bool)EEPROM.read(EEPROM_DST);
+    printAction("Currently in DST? " + (String)timeSetDst);
+    byte offset = timeParams.CurrentDSTOffsetHours();
+    printAction("Current DST offset: " + (String)offset);
 
-      if (timeSetDst && offset == 0)
-        now = now - TimeSpan(0, offset, 0, 0);
-      else if (!timeSetDst && offset != 0)
-        now = now + TimeSpan(0, offset, 0, 0);
+    if (timeSetDst && offset == 0) {
+      now = now - TimeSpan(0, offset, 0, 0);
     }
-    
-    timeParams.CurrentTime = now;
-    Sun.Update(timeParams.CurrentTime);
+    else if (!timeSetDst && offset != 0) {
+      now = now + TimeSpan(0, offset, 0, 0);
+    }
+  }
+
+  if (DEBUG) {
+    printAction("Adjusted time: " + now.ToISO8601(timeParams.CurrentDSTOffset()));
+    Sun.PrintTo(Serial);
+  }
+  
+  timeParams.CurrentTime = now;
+  if (DEBUG) {
+    printAction("Adjusted set time: " + timeParams.CurrentTime.ToISO8601(timeParams.CurrentDSTOffset()));
+  }
+
+  Sun = Sol(location, timeParams);
+
+  if (DEBUG) {
+    Sun.PrintTo(Serial);
+  }
 }
 
 void setupAlarm() {
+  printAction(F("Configuring alarm interrupt"));
   Clock.disableSquareWave();
 
   pinMode(RTC_SQW_INTERRUPT, INPUT_PULLUP);
   attachInterrupt(RTC_SQW_INTERRUPT, alarmIsr, FALLING);
 
   if (DEBUG) {
+    printAction(F("Configuring DEBUG alarms"));
     DateTime alarm1 = Clock.read();
     alarm1.Second = 20;
     Clock.setAlarm(alarm1, DS3231_Simple::ALARM_MATCH_SECOND);
@@ -102,20 +133,36 @@ void setupAlarm() {
 
 void loop() {
   if (digitalRead(UP_SWITCH_PIN) == LOW) {
-      motorOpen();
-      switchPressed = true;
+    motorOpen();
+    switchPressed = true;
   }
-  
+
   if (digitalRead(DOWN_SWITCH_PIN) == LOW) {
-      motorClose();
-      switchPressed = true;
+    motorClose();
+    switchPressed = true;
   }
-  
+
   if (digitalRead(UP_SWITCH_PIN) == HIGH && digitalRead(DOWN_SWITCH_PIN) == HIGH && switchPressed) {
-       motorStop();
-       switchPressed = false;
+    motorStop();
+    switchPressed = false;
+  }
+
+  uint8_t AlarmsFired = Clock.checkAlarms();
+
+  if (AlarmsFired & 1)
+  {
+    printAction(F("First alarm fired"));
+    alarmIsrWasCalled = false;
+    takeCurrentAction();
   }
   
+  if (AlarmsFired & 2)
+  {
+    printAction(F("Second alarm fired"));
+    alarmIsrWasCalled = false;
+    takeCurrentAction();
+  }
+    
   if (alarmIsrWasCalled) {
     alarmIsrWasCalled = false;
     takeCurrentAction();
@@ -123,16 +170,19 @@ void loop() {
 }
 
 void motorOpen() {
+  printAction(F("Powering motor OPEN"));
   digitalWrite(MOTOR_DIR_PIN, LOW);
   digitalWrite(MOTOR_PWM_PIN, HIGH);
 }
 
 void motorClose() {
+  printAction(F("Powering motor CLOSE"));
   digitalWrite(MOTOR_DIR_PIN, HIGH);
   digitalWrite(MOTOR_PWM_PIN, HIGH);
 }
 
 void motorStop() {
+  printAction(F("Stopping motor"));
   digitalWrite(MOTOR_PWM_PIN, LOW);
 }
 
@@ -174,30 +224,31 @@ void lightToggle(bool turnOn) {
 
 void takeCurrentAction() {
   adjustTime();
-  int currentStep = EEPROM.read(EEPROM_ACTION);
+  COOP_ACTIONS currentStep = EEPROM.read(EEPROM_ACTION);
+  printAction("Taking action " + (String)currentStep);
 
   switch (currentStep) {
     case AM_LIGHT_ON:
       lightToggle(true);
       break;
 
-     case DOOR_OPEN:
+    case DOOR_OPEN:
       doorToggle(true);
       break;
 
-     case AM_LIGHT_OFF:
+    case AM_LIGHT_OFF:
       lightToggle(false);
       break;
 
-     case PM_LIGHT_ON:
+    case PM_LIGHT_ON:
       lightToggle(true);
       break;
 
-     case DOOR_CLOSE:
+    case DOOR_CLOSE:
       doorToggle(false);
       break;
 
-     case PM_LIGHT_OFF:
+    case PM_LIGHT_OFF:
       lightToggle(false);
       break;
   }
@@ -207,10 +258,12 @@ void takeCurrentAction() {
 }
 
 void setNextAlarm() {
-  adjustTime();
   DateTime toSet;
 
-  switch (EEPROM.read(EEPROM_ACTION)) {
+  COOP_ACTIONS action = EEPROM.read(EEPROM_ACTION);
+  printAction("Setting alarm for action " + (String)action);
+
+  switch (action) {
     case AM_LIGHT_ON:
       toSet = Sun.Sunrise;
       break;
@@ -229,32 +282,33 @@ void setNextAlarm() {
 
     case DOOR_CLOSE:
       toSet = DateTime(timeParams.CurrentTime.Year, timeParams.CurrentTime.Month,
-                timeParams.CurrentTime.Day, 21, 0, 0);
+                       timeParams.CurrentTime.Day, 21, 0, 0);
       break;
 
     case PM_LIGHT_OFF:
       toSet = DateTime(timeParams.CurrentTime.Year, timeParams.CurrentTime.Month,
-                timeParams.CurrentTime.Day, 21, 0, 0) + TimeSpan(0, 8, 0, 0);
+                       timeParams.CurrentTime.Day, 21, 0, 0) + TimeSpan(0, 8, 0, 0);
       break;
     case RESET:
       toSet = DateTime(timeParams.CurrentTime.Year, timeParams.CurrentTime.Month,
-                timeParams.CurrentTime.Day, 5, 0, 0);
+                       timeParams.CurrentTime.Day, 5, 0, 0);
       break;
   }
 
-  printAction("Setting alarm to " + toSet.ToISO8601(timeParams.CurrentDSTOffset()));
+  printAction("Setting alarm to: " + toSet.ToISO8601(timeParams.CurrentDSTOffset()));
   Clock.setAlarm(toSet, DS3231_Simple::ALARM_MATCH_SECOND_MINUTE_HOUR);
 }
 
 COOP_ACTIONS getNextAlarm() {
+  printAction(F("Configuring initial alarm"));
   adjustTime();
   uint32_t currentUnix = timeParams.CurrentTime.unixtime();
   uint32_t fiveAMUnix = (
-              DateTime(timeParams.CurrentTime.Year, timeParams.CurrentTime.Month,
-              timeParams.CurrentTime.Day, 5, 0, 0)).unixtime();
+                          DateTime(timeParams.CurrentTime.Year, timeParams.CurrentTime.Month,
+                                   timeParams.CurrentTime.Day, 5, 0, 0)).unixtime();
   uint32_t ninePMUnix = (
-              DateTime(timeParams.CurrentTime.Year, timeParams.CurrentTime.Month,
-              timeParams.CurrentTime.Day, 21, 0, 0)).unixtime();
+                          DateTime(timeParams.CurrentTime.Year, timeParams.CurrentTime.Month,
+                                   timeParams.CurrentTime.Day, 21, 0, 0)).unixtime();
   uint32_t sunriseUnix = Sun.Sunrise.unixtime();
   uint32_t sunsetUnix = Sun.Sunset.unixtime();
   uint32_t thirtyMinutes = TimeSpan(0, 0, 30, 0).totalseconds();
@@ -302,5 +356,6 @@ void printAction(String action) {
 }
 
 void alarmIsr() {
-    alarmIsrWasCalled = true;
+  printAction("SOME ACTION");
+  alarmIsrWasCalled = true;
 }
