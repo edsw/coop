@@ -2,7 +2,7 @@
 #include <EEPROM.h>
 #include "Sol.h"
 
-const bool DEBUG = true;
+const bool DEBUG = false;
 
 const Location location = {
   Latitude: 41.931745,
@@ -25,8 +25,8 @@ const int LIGHT_PIN = 10,
           DOWN_SWITCH_PIN = 14,
           RTC_SQW_INTERRUPT = 4;
 
-const int MOTOR_UP_SECONDS = 2,//60
-          MOTOR_DOWN_SECONDS = 2;//60;
+const long MOTOR_UP_SECONDS = 80,
+           MOTOR_DOWN_SECONDS = 75;
 
 const int EEPROM_DST = 0,
           EEPROM_ACTION = 1,
@@ -41,6 +41,7 @@ volatile boolean alarmIsrWasCalled = false;
 void setup() {
   Serial.begin(9600);
   delay(3000);
+  Serial.println(F("PROGRAM BEGIN"));
   Clock.begin();
 
   pinMode(LIGHT_PIN, OUTPUT);
@@ -64,6 +65,9 @@ void setup() {
     }
   }
 
+  EEPROM.write(EEPROM_ACTION, 0);
+  EEPROM.write(EEPROM_DOOR_STATE, 0);
+    
   adjustTime();
   setupAlarm();
   
@@ -73,11 +77,6 @@ void setup() {
     EEPROM.write(EEPROM_ACTION, next);
     setNextAlarm();
   }
-  else {
-    EEPROM.write(EEPROM_ACTION, 0);
-  }
-
-  lightToggle(true);
 }
 
 void adjustTime() {
@@ -98,25 +97,14 @@ void adjustTime() {
     }
   }
 
-  if (DEBUG) {
-    printAction("Adjusted time: " + now.ToISO8601(timeParams.CurrentDSTOffset()));
-    Sun.PrintTo(Serial);
-  }
-  
   timeParams.CurrentTime = now;
-  if (DEBUG) {
-    printAction("Adjusted set time: " + timeParams.CurrentTime.ToISO8601(timeParams.CurrentDSTOffset()));
-  }
-
   Sun = Sol(location, timeParams);
-
-  if (DEBUG) {
-    Sun.PrintTo(Serial);
-  }
+  Sun.PrintTo(Serial);
 }
 
 void setupAlarm() {
   printAction(F("Configuring alarm interrupt"));
+  Clock.disableAlarms();
   Clock.disableSquareWave();
 
   pinMode(RTC_SQW_INTERRUPT, INPUT_PULLUP);
@@ -133,16 +121,19 @@ void setupAlarm() {
 
 void loop() {
   if (digitalRead(UP_SWITCH_PIN) == LOW) {
+    printAction(F("Manual door opening"));
     motorOpen();
     switchPressed = true;
   }
 
   if (digitalRead(DOWN_SWITCH_PIN) == LOW) {
+    printAction(F("Manual door closing"));
     motorClose();
     switchPressed = true;
   }
 
   if (digitalRead(UP_SWITCH_PIN) == HIGH && digitalRead(DOWN_SWITCH_PIN) == HIGH && switchPressed) {
+    printAction(F("Manual door stop"));
     motorStop();
     switchPressed = false;
   }
@@ -155,34 +146,32 @@ void loop() {
     alarmIsrWasCalled = false;
     takeCurrentAction();
   }
-  
+
   if (AlarmsFired & 2)
   {
     printAction(F("Second alarm fired"));
     alarmIsrWasCalled = false;
     takeCurrentAction();
   }
-    
+
   if (alarmIsrWasCalled) {
     alarmIsrWasCalled = false;
+    printAction(F("Alarm called"));
     takeCurrentAction();
   }
 }
 
 void motorOpen() {
-  printAction(F("Powering motor OPEN"));
   digitalWrite(MOTOR_DIR_PIN, LOW);
   digitalWrite(MOTOR_PWM_PIN, HIGH);
 }
 
 void motorClose() {
-  printAction(F("Powering motor CLOSE"));
   digitalWrite(MOTOR_DIR_PIN, HIGH);
   digitalWrite(MOTOR_PWM_PIN, HIGH);
 }
 
 void motorStop() {
-  printAction(F("Stopping motor"));
   digitalWrite(MOTOR_PWM_PIN, LOW);
 }
 
@@ -191,18 +180,20 @@ void doorToggle(bool open) {
     if (!isDoorOpen()) {
       printAction(F("Opening door"));
       motorOpen();
-      delay(MOTOR_UP_SECONDS * 1000);
+      delay(MOTOR_UP_SECONDS * 1000L);
       motorStop();
       EEPROM.write(EEPROM_DOOR_STATE, 1);
+      printAction(F("Door opened"));
     }
   }
   else {
     if (isDoorOpen()) {
       printAction(F("Closing door"));
       motorClose();
-      delay(MOTOR_DOWN_SECONDS * 1000);
+      delay(MOTOR_DOWN_SECONDS * 1000L);
       motorStop();
       EEPROM.write(EEPROM_DOOR_STATE, 0);
+      printAction(F("Door closed"));
     }
   }
 }
@@ -266,18 +257,26 @@ void setNextAlarm() {
   switch (action) {
     case AM_LIGHT_ON:
       toSet = Sun.Sunrise;
+      //toSet = DateTime(timeParams.CurrentTime.Year, timeParams.CurrentTime.Month,
+      //                             timeParams.CurrentTime.Day, 6, 30, 0);
       break;
 
     case DOOR_OPEN:
       toSet = Sun.Sunrise + TimeSpan(0, 0, 30, 0);
+      //toSet = DateTime(timeParams.CurrentTime.Year, timeParams.CurrentTime.Month,
+      //                             timeParams.CurrentTime.Day, 6, 30, 0) + TimeSpan(0, 0, 30, 0);
       break;
 
     case AM_LIGHT_OFF:
       toSet = Sun.Sunset - TimeSpan(0, 0, 30, 0);
+      //toSet = DateTime(timeParams.CurrentTime.Year, timeParams.CurrentTime.Month,
+      //                             timeParams.CurrentTime.Day, 18, 0, 0) - TimeSpan(0, 0, 30, 0);
       break;
 
     case PM_LIGHT_ON:
       toSet = Sun.Sunset;
+      //toSet = DateTime(timeParams.CurrentTime.Year, timeParams.CurrentTime.Month,
+      //                             timeParams.CurrentTime.Day, 18, 0, 0);
       break;
 
     case DOOR_CLOSE:
@@ -296,7 +295,7 @@ void setNextAlarm() {
   }
 
   printAction("Setting alarm to: " + toSet.ToISO8601(timeParams.CurrentDSTOffset()));
-  Clock.setAlarm(toSet, DS3231_Simple::ALARM_MATCH_SECOND_MINUTE_HOUR);
+  Clock.setAlarm(toSet, DS3231_Simple::ALARM_MATCH_MINUTE_HOUR_DATE);
 }
 
 COOP_ACTIONS getNextAlarm() {
@@ -356,6 +355,5 @@ void printAction(String action) {
 }
 
 void alarmIsr() {
-  printAction("SOME ACTION");
   alarmIsrWasCalled = true;
 }

@@ -9,38 +9,39 @@ double RADEG = (180.0 / M_PI);
 double DEGRAD = (M_PI / 180.0);
 double INV360 =  (1.0 / 360.0);
     
-Sol::Sol() {}
-
-Sol::Sol(Location loc, LocalTimeParams ltp) {
-    _loc = loc;
-    _ltp = ltp;
-    sunriset();
+Sol::Sol() {
+  _initialized = false;
 }
 
-void Sol::Update(LocalTimeParams l) {
-    _ltp = l;
+Sol::Sol(Location loc, LocalTimeParams ltp) {
+    _initialized = true;
+    _loc = loc;
+    _ltp = ltp;
     sunriset();
 }
 
 DateTime Sol::dt_from_double(double d) {
     byte h = (byte)d;
     byte m = (byte)((d - (double)h) * 60);
-    
-    h = h + _ltp.GMTOffsetHours + _ltp.CurrentDSTOffset();
- 
+    h = h + _ltp.CurrentDSTOffset();
     return DateTime(_ltp.CurrentTime.Year, _ltp.CurrentTime.Month, _ltp.CurrentTime.Day, h, m);
 }
 
 void Sol::PrintTo(Stream &Printer) {
-  Printer.print(F("Sunrise: "));
-  Printer.print(Sunrise.Hour, DEC);
-  Printer.print(':');
-  Printer.print(Sunrise.Minute, DEC);
-  Printer.print(F(" Sunset: "));
-  Printer.print(Sunset.Hour, DEC);
-  Printer.print(':');
-  Printer.print(Sunset.Minute, DEC);
-  Printer.println();
+  if (_initialized) {
+    Printer.print(F("Sunrise: "));
+    Printer.print(Sunrise.Hour, DEC);
+    Printer.print(':');
+    Printer.print(Sunrise.Minute, DEC);
+    Printer.print(F(" Sunset: "));
+    Printer.print(Sunset.Hour, DEC);
+    Printer.print(':');
+    Printer.print(Sunset.Minute, DEC);
+    Printer.println();
+  }
+  else {
+    Printer.println(F("Sol uninitialized"));
+  }
 }
 
 int Sol::days_since_2000_Jan_0(int y, int m,int d) {
@@ -85,6 +86,10 @@ void Sol::sunriset() {
 /*                    both set to the time when the sun is at south.  */
 /*                                                                    */
 /**********************************************************************/
+    if (!_initialized) {
+      return;
+    }
+ 
     int year = ((int)_ltp.CurrentTime.Year) + 2000,
         month = (int)_ltp.CurrentTime.Month,
         day = (int)_ltp.CurrentTime.Day,
@@ -101,7 +106,7 @@ void Sol::sunriset() {
         sidtime;    /* Local sidereal time */
 
     /* Compute d of 12h local mean solar time */
-    d = days_since_2000_Jan_0(year,month,day) + 0.5 - _loc.Longitude/360.0;
+    d = days_since_2000_Jan_0(year, month, day) + 0.5 - _loc.Longitude/360.0;
     
     /* Compute the local sidereal time of this moment */
     sidtime = revolution(GMST0(d) + 180.0 + _loc.Longitude);

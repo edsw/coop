@@ -11,7 +11,6 @@ class Sol
 public:
     Sol();
     Sol(Location loc, LocalTimeParams ltp);
-    void Update(LocalTimeParams l);
     DateTime Sunrise;
     DateTime Sunset;
     void PrintTo(Stream &Printer);
@@ -19,6 +18,7 @@ public:
 private:
     Location _loc;
     LocalTimeParams _ltp;
+    boolean _initialized = false;
     DateTime dt_from_double(double d);
     int days_since_2000_Jan_0(int y, int m, int d);
     double sind(double x);

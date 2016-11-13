@@ -21,7 +21,7 @@ struct LocalTimeParams {
     byte DSTEndWeek;
     DateTime CurrentTime;
 
-    byte CurrentDSTOffsetHours() {//https://github.com/probonopd/TimeLord/blob/master/TimeLord.cpp
+    short CurrentDSTOffsetHours() {//https://github.com/probonopd/TimeLord/blob/master/TimeLord.cpp
         if (DSTOffsetHours == 0 || CurrentTime.Month < DSTStartMonth || CurrentTime.Month > DSTEndMonth)
             return 0;
             
