@@ -110,16 +110,40 @@ void setupAlarm() {
   pinMode(RTC_SQW_INTERRUPT, INPUT_PULLUP);
   attachInterrupt(RTC_SQW_INTERRUPT, alarmIsr, FALLING);
 
-  if (DEBUG) {
+  /*if (DEBUG) {
     printAction(F("Configuring DEBUG alarms"));
     DateTime alarm1 = Clock.read();
     alarm1.Second = 20;
     Clock.setAlarm(alarm1, DS3231_Simple::ALARM_MATCH_SECOND);
     Clock.setAlarm(DS3231_Simple::ALARM_EVERY_MINUTE);
-  }
+  }*/
 }
 
+void alarmIsr() { alarmIsrWasCalled = true; }
+
 void loop() {
+  /*uint8_t AlarmsFired = Clock.checkAlarms();
+
+  if (AlarmsFired & 1)
+  {
+    printAction(F("First alarm fired"));
+    alarmIsrWasCalled = false;
+    takeCurrentAction();
+  }
+
+  if (AlarmsFired & 2)
+  {
+    printAction(F("Second alarm fired"));
+    alarmIsrWasCalled = false;
+    takeCurrentAction();
+  }*/
+
+  if (alarmIsrWasCalled) {
+    alarmIsrWasCalled = false;
+    printAction(F("Alarm called"));
+    takeCurrentAction();
+  }
+
   if (digitalRead(UP_SWITCH_PIN) == LOW) {
     printAction(F("Manual door opening"));
     motorOpen();
@@ -136,28 +160,6 @@ void loop() {
     printAction(F("Manual door stop"));
     motorStop();
     switchPressed = false;
-  }
-
-  uint8_t AlarmsFired = Clock.checkAlarms();
-
-  if (AlarmsFired & 1)
-  {
-    printAction(F("First alarm fired"));
-    alarmIsrWasCalled = false;
-    takeCurrentAction();
-  }
-
-  if (AlarmsFired & 2)
-  {
-    printAction(F("Second alarm fired"));
-    alarmIsrWasCalled = false;
-    takeCurrentAction();
-  }
-
-  if (alarmIsrWasCalled) {
-    alarmIsrWasCalled = false;
-    printAction(F("Alarm called"));
-    takeCurrentAction();
   }
 }
 
@@ -257,26 +259,19 @@ void setNextAlarm() {
   switch (action) {
     case AM_LIGHT_ON:
       toSet = Sun.Sunrise;
-      //toSet = DateTime(timeParams.CurrentTime.Year, timeParams.CurrentTime.Month,
-      //                             timeParams.CurrentTime.Day, 6, 30, 0);
       break;
 
     case DOOR_OPEN:
-      toSet = Sun.Sunrise + TimeSpan(0, 0, 30, 0);
-      //toSet = DateTime(timeParams.CurrentTime.Year, timeParams.CurrentTime.Month,
-      //                             timeParams.CurrentTime.Day, 6, 30, 0) + TimeSpan(0, 0, 30, 0);
+      toSet = Sun.Sunrise + TimeSpan(0, 0, 15, 0);
       break;
 
     case AM_LIGHT_OFF:
-      toSet = Sun.Sunset - TimeSpan(0, 0, 30, 0);
-      //toSet = DateTime(timeParams.CurrentTime.Year, timeParams.CurrentTime.Month,
-      //                             timeParams.CurrentTime.Day, 18, 0, 0) - TimeSpan(0, 0, 30, 0);
+      toSet = Sun.Sunset - TimeSpan(0, 0, 15, 0);
       break;
 
     case PM_LIGHT_ON:
-      toSet = Sun.Sunset;
-      //toSet = DateTime(timeParams.CurrentTime.Year, timeParams.CurrentTime.Month,
-      //                             timeParams.CurrentTime.Day, 18, 0, 0);
+      toSet = Sun.Sunset + TimeSpan(0, 0, 30, 0);
+      //TODO check if after 9PM
       break;
 
     case DOOR_CLOSE:
@@ -295,21 +290,20 @@ void setNextAlarm() {
   }
 
   printAction("Setting alarm to: " + toSet.ToISO8601(timeParams.CurrentDSTOffset()));
-  Clock.setAlarm(toSet, DS3231_Simple::ALARM_MATCH_MINUTE_HOUR_DATE);
+  Clock.setAlarm(toSet, DS3231_Simple::ALARM_MATCH_MINUTE_HOUR);
 }
 
 COOP_ACTIONS getNextAlarm() {
   printAction(F("Configuring initial alarm"));
   adjustTime();
   uint32_t currentUnix = timeParams.CurrentTime.unixtime();
-  uint32_t fiveAMUnix = (
-                          DateTime(timeParams.CurrentTime.Year, timeParams.CurrentTime.Month,
+  uint32_t fiveAMUnix = (DateTime(timeParams.CurrentTime.Year, timeParams.CurrentTime.Month,
                                    timeParams.CurrentTime.Day, 5, 0, 0)).unixtime();
-  uint32_t ninePMUnix = (
-                          DateTime(timeParams.CurrentTime.Year, timeParams.CurrentTime.Month,
+  uint32_t ninePMUnix = (DateTime(timeParams.CurrentTime.Year, timeParams.CurrentTime.Month,
                                    timeParams.CurrentTime.Day, 21, 0, 0)).unixtime();
   uint32_t sunriseUnix = Sun.Sunrise.unixtime();
   uint32_t sunsetUnix = Sun.Sunset.unixtime();
+  uint32_t fifteenMinutes = TimeSpan(0, 0, 15, 0).totalseconds();
   uint32_t thirtyMinutes = TimeSpan(0, 0, 30, 0).totalseconds();
 
   if (currentUnix < fiveAMUnix) {
@@ -321,19 +315,19 @@ COOP_ACTIONS getNextAlarm() {
     return AM_LIGHT_ON;
   }
 
-  if (currentUnix < sunriseUnix + thirtyMinutes) {
+  if (currentUnix < (sunriseUnix + fifteenMinutes)) {
     lightToggle(true);
     doorToggle(true);
     return DOOR_OPEN;
   }
 
-  if (currentUnix < sunsetUnix - thirtyMinutes) {
+  if (currentUnix < (sunsetUnix - fifteenMinutes)) {
     lightToggle(false);
     doorToggle(true);
     return AM_LIGHT_OFF;
   }
 
-  if (currentUnix < sunsetUnix) {
+  if (currentUnix < sunsetUnix + thirtyMinutes) {
     lightToggle(true);
     return PM_LIGHT_ON;
   }
@@ -352,8 +346,4 @@ void printAction(String action) {
   Clock.printTo(Serial);
   Serial.print(F(": "));
   Serial.println(action);
-}
-
-void alarmIsr() {
-  alarmIsrWasCalled = true;
 }
